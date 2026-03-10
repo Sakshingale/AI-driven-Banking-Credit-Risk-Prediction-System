@@ -1,38 +1,36 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { db } from "./db";
+import { loanApplications, type InsertLoanApplication, type LoanApplication, type UpdateLoanApplicationRequest } from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getLoans(): Promise<LoanApplication[]>;
+  getLoan(id: number): Promise<LoanApplication | undefined>;
+  createLoan(loan: InsertLoanApplication): Promise<LoanApplication>;
+  updateLoan(id: number, updates: UpdateLoanApplicationRequest): Promise<LoanApplication>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  async getLoans(): Promise<LoanApplication[]> {
+    return await db.select().from(loanApplications).orderBy(desc(loanApplications.createdAt));
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getLoan(id: number): Promise<LoanApplication | undefined> {
+    const [loan] = await db.select().from(loanApplications).where(eq(loanApplications.id, id));
+    return loan;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async createLoan(loan: InsertLoanApplication): Promise<LoanApplication> {
+    const [newLoan] = await db.insert(loanApplications).values(loan).returning();
+    return newLoan;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async updateLoan(id: number, updates: UpdateLoanApplicationRequest): Promise<LoanApplication> {
+    const [updated] = await db.update(loanApplications)
+      .set(updates)
+      .where(eq(loanApplications.id, id))
+      .returning();
+    return updated;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
